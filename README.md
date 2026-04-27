@@ -37,14 +37,45 @@ hundred to a few thousand JPEGs. Runs entirely on your machine; no network.
 
 ## Install
 
+Pick whichever installer you prefer. The first run downloads the
+`insightface` `buffalo_l` model (~280 MB) into `~/.insightface/`.
+
+### `uv tool` (cross-platform — macOS, Linux, Windows)
+
+If you don't have [uv](https://github.com/astral-sh/uv) yet:
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Then:
+
+```bash
+uv tool install git+https://github.com/son-engr-kr/picture-classifier
+pcls serve
+```
+
+To upgrade later: `uv tool upgrade picture-classifier`.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap son-engr-kr/picture-classifier
+brew install picture-classifier
+pcls serve
+```
+
+### From source
+
 ```bash
 git clone https://github.com/son-engr-kr/picture-classifier.git
 cd picture-classifier
 uv sync
+uv run pcls serve
 ```
-
-The first run downloads the `insightface` `buffalo_l` model (~280 MB) into
-`~/.insightface/`.
 
 ## Usage
 
