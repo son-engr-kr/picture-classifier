@@ -24,44 +24,38 @@ jobs:
         id: sha
         run: |
           URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.tag.outputs.tag }}.tar.gz"
-          # GitHub may take a moment to expose the auto-generated tarball;
-          # poll briefly so a back-to-back tag+workflow run still succeeds.
+          # GitHub may take a moment to expose the auto-generated tarball.
+          SHA=""
           for i in 1 2 3 4 5; do
-            SHA=$(curl -fsSL "$URL" | shasum -a 256 | cut -d' ' -f1) && break
-            echo "tarball not ready yet, retry $i…"
+            if SHA=$(curl -fsSL "$URL" | shasum -a 256 | cut -d' ' -f1) && [ -n "$SHA" ]; then
+              break
+            fi
+            echo "tarball not ready, retry $i…"
             sleep 5
           done
-          [ -n "$SHA" ] || { echo "failed to fetch tarball" >&2; exit 1; }
+          [ -n "$SHA" ] || { echo "failed to fetch tarball at $URL"; exit 1; }
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Update formula in tap repo
         env:
           GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA: ${{ steps.sha.outputs.sha }}
         run: |
           set -eu
-          TAG="${{ steps.tag.outputs.tag }}"
-          VERSION="${{ steps.tag.outputs.version }}"
-          SHA="${{ steps.sha.outputs.sha }}"
-
           gh repo clone son-engr-kr/homebrew-picture-classifier tap
           cd tap
-
-          python3 - <<EOF
-import re, pathlib
-p = pathlib.Path("Formula/picture-classifier.rb")
-src = p.read_text()
-src = re.sub(r'/refs/tags/v[^"]+\.tar\.gz', f'/refs/tags/$TAG.tar.gz', src)
-src = re.sub(r'sha256 "[a-f0-9]+"', f'sha256 "$SHA"', src)
-p.write_text(src)
-EOF
+          sed -i -E "s|/refs/tags/v[^\"]+\.tar\.gz|/refs/tags/${TAG}.tar.gz|" Formula/picture-classifier.rb
+          sed -i -E "s|sha256 \"[a-f0-9]+\"|sha256 \"${SHA}\"|" Formula/picture-classifier.rb
 
           if git diff --quiet; then
-            echo "Formula already up to date for $TAG"
+            echo "Formula already up to date for ${TAG}"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/picture-classifier.rb
-          git commit -m "picture-classifier $VERSION"
+          git commit -m "picture-classifier ${VERSION}"
           git push
