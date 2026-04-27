@@ -152,6 +152,22 @@ decisions are kept.
 Caches (`picks.json.thumbs/`, `picks.json.faces/`,
 `picks.json.embeddings.npy`) are recreated on demand and safe to delete.
 
+## Releasing (maintainer notes)
+
+Bump the version, tag, and push. The
+`Update Homebrew tap` GitHub Action picks up `v*` tags and updates the
+[homebrew tap](https://github.com/son-engr-kr/homebrew-picture-classifier)
+formula automatically.
+
+```bash
+# bump version in pyproject.toml first
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+The action requires a `TAP_TOKEN` repository secret — a fine-grained PAT
+with `Contents: Write` permission on `son-engr-kr/homebrew-picture-classifier`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
