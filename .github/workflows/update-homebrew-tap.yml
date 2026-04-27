@@ -13,6 +13,15 @@ jobs:
   update-tap:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify TAP_TOKEN secret is set
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error::TAP_TOKEN secret is not set. See README 'Releasing' section."
+            exit 1
+          fi
+
       - name: Resolve tag
         id: tag
         run: |
