@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# macOS
+.DS_Store
+._*
+
+# IDE
+.vscode/
+.idea/
+
+# Project data — user-specific, not for the repo
+picks.json
+picks.json.*
+*.picks.json
+*.picks.json.*
+picks/
+*.picks/
+.picture-classifier/

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Picture Classifier</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="landing" class="hidden">
+    <div class="landing-shell">
+      <header class="landing-header">
+        <h1>Picture Classifier</h1>
+        <p class="landing-tagline">Score your photos for blur, exposure, and faces — then cull fast.</p>
+      </header>
+
+      <section class="landing-card">
+        <h2>Open a project</h2>
+        <p class="landing-hint">
+          Pick a folder containing your photos. The app scans for
+          <code>.jpg</code>, <code>.jpeg</code>, <code>.png</code> and creates
+          (or reloads) a <code>picks.json</code> file inside that folder.
+        </p>
+
+        <div class="landing-row">
+          <label for="landing-photo-dir">Photo folder</label>
+          <input type="text" id="landing-photo-dir" placeholder="Click Browse… or paste an absolute path" autofocus />
+          <button type="button" id="landing-browse" class="browse-btn">Browse…</button>
+        </div>
+
+        <details class="landing-advanced">
+          <summary>Advanced</summary>
+          <div class="landing-row">
+            <label for="landing-jpeg-subdir">JPEG subfolder</label>
+            <input type="text" id="landing-jpeg-subdir" placeholder="(leave empty for flat)" />
+            <span class="landing-help">If your JPEGs live in a subfolder like <code>JPEG/</code>, enter its name.</span>
+          </div>
+          <div class="landing-row">
+            <label for="landing-db-path">DB path</label>
+            <input type="text" id="landing-db-path" placeholder="(default: <photo folder>/picks.json)" />
+          </div>
+        </details>
+
+        <div class="landing-actions">
+          <button id="landing-open" class="primary">Open</button>
+          <span id="landing-status"></span>
+        </div>
+      </section>
+
+      <section class="landing-card">
+        <h2>Recent</h2>
+        <div id="landing-recents"></div>
+      </section>
+
+      <section class="landing-card">
+        <h2>Expected folder layouts</h2>
+        <p class="landing-hint">
+          Both layouts are supported. You can switch how scenes are grouped
+          (by folder vs. by capture-time gap) any time after opening.
+        </p>
+        <div class="layout-diagrams">
+          <div class="layout-diagram">
+            <h3>Flat</h3>
+            <div class="folder-tree">
+<pre>📁 my-photos/
+   🖼 IMG_0001.JPG
+   🖼 IMG_0002.JPG
+   🖼 IMG_0003.JPG
+   …
+   🗒 picks.json   <span class="auto">(auto-created)</span></pre>
+            </div>
+            <p class="layout-note">Use <b>time-gap</b> grouping later to auto-split into scenes.</p>
+          </div>
+          <div class="layout-diagram">
+            <h3>Pre-grouped folders</h3>
+            <div class="folder-tree">
+<pre>📁 wedding-2025/
+   📁 Scene_001/
+      🖼 IMG_0001.JPG
+      🖼 IMG_0002.JPG
+   📁 Scene_002/
+      🖼 …
+   🗒 picks.json   <span class="auto">(auto-created)</span></pre>
+            </div>
+            <p class="layout-note">Folder names become scene names automatically.</p>
+          </div>
+          <div class="layout-diagram">
+            <h3>Photo dir + JPEG subfolder</h3>
+            <div class="folder-tree">
+<pre>📁 shoot/
+   📁 RAW/
+   📁 JPEG/         <span class="auto">← set "JPEG subfolder"</span>
+      📁 Scene_001/
+         🖼 IMG_0001.JPG
+   🗒 picks.json   <span class="auto">(at shoot/)</span></pre>
+            </div>
+            <p class="layout-note">For workflows where RAWs and JPEGs live side-by-side.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside id="sidebar">
+    <header>
+      <h1>Scenes</h1>
+      <div id="overall-progress"></div>
+      <div id="scene-grouping">
+        <label>Group:</label>
+        <select id="scene-mode">
+          <option value="folder">By folder</option>
+          <option value="time_gap">By time gap</option>
+        </select>
+        <input type="number" id="scene-gap" value="30" min="1" title="Minutes" />
+        <span class="unit">min</span>
+      </div>
+      <button id="switch-project-btn" title="Open a different project">⇄ switch project</button>
+    </header>
+    <div id="filter-row">
+      <button data-filter="all" class="filter active">all</button>
+      <button data-filter="undecided" class="filter">undecided</button>
+      <button data-filter="pick" class="filter">pick</button>
+      <button data-filter="review" class="filter">review</button>
+      <button data-filter="reject" class="filter">reject</button>
+    </div>
+    <div id="people-section">
+      <div id="people-section-head">
+        <h2>People</h2>
+        <button id="people-cluster-btn" title="Run face clustering">↻ cluster</button>
+        <button id="people-manage-btn" title="Edit labels &amp; priorities">⚙</button>
+      </div>
+      <div id="people-chips"></div>
+    </div>
+    <ul id="scene-list"></ul>
+    <footer id="sidebar-footer">
+      <h2>Auto-suggestion</h2>
+      <div class="criteria">
+        <div>
+          <code>badness</code> = (1 − <code>blur_rank</code>)
+          + 0.3 × |<code>exposure_z</code>|
+          + 1.0 if eyes closed
+        </div>
+        <div class="legend">
+          Within each scene:
+          <span class="dot pick"></span>top 30% pick
+          ·
+          <span class="dot review"></span>middle review
+          ·
+          <span class="dot reject"></span>bottom 30% reject
+        </div>
+      </div>
+    </footer>
+  </aside>
+
+  <main id="main">
+    <header id="main-header">
+      <span id="scene-title">— select a scene —</span>
+      <div id="page-nav">
+        <button id="prev-page" title="prev page (←)">‹</button>
+        <span id="page-indicator">—</span>
+        <button id="next-page" title="next page (→)">›</button>
+      </div>
+      <div id="cols-toggle">
+        <span class="label">view:</span>
+        <button data-cols="1" class="cols">1</button>
+        <button data-cols="2" class="cols">2</button>
+        <button data-cols="4" class="cols active">4</button>
+        <button data-cols="8" class="cols">8</button>
+      </div>
+      <span id="scene-stats"></span>
+      <button id="reject-undecided-btn" title="Mark all undecided photos in this scene as reject" disabled>✕ reject undecided</button>
+      <button id="export-picks-btn" title="Copy all PICK photos to a folder" disabled>📁 export picks</button>
+      <button id="rescore-btn" title="Re-run scoring on all photos (preserves decisions)">↻ rescore</button>
+    </header>
+    <div id="grid"></div>
+    <div id="next-preview" class="hidden">
+      <span class="label">NEXT</span>
+      <img id="next-preview-img" alt="" />
+      <span id="next-preview-name"></span>
+    </div>
+  </main>
+
+  <div id="score-progress" class="hidden">
+    <div class="score-box">
+      <h2 id="score-title">Scoring photos…</h2>
+      <div class="score-bar"><div id="score-bar-fill"></div></div>
+      <div id="score-progress-text">starting…</div>
+      <div id="score-current"></div>
+    </div>
+  </div>
+
+  <div id="export-modal" class="hidden">
+    <div class="export-box">
+      <header>
+        <h2>Export picks</h2>
+        <button id="export-modal-close" title="Esc">×</button>
+      </header>
+      <div class="export-body">
+        <p class="export-hint">
+          Copies all photos marked <b>PICK</b> from the source folder to a target folder.
+          Originals are not modified.
+        </p>
+        <div class="export-row">
+          <label>Picks</label>
+          <span id="export-count">—</span>
+        </div>
+        <div class="export-row">
+          <label>Target folder</label>
+          <input type="text" id="export-target" placeholder="/absolute/path/to/output" />
+        </div>
+        <div class="export-row">
+          <label></label>
+          <label class="cb">
+            <input type="checkbox" id="export-flatten" />
+            Flatten (drop subfolders, auto-rename duplicates)
+          </label>
+        </div>
+        <div id="export-status"></div>
+      </div>
+      <footer>
+        <button id="export-cancel">Cancel</button>
+        <button id="export-confirm" class="primary">Copy</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="people-modal" class="hidden">
+    <div class="people-box">
+      <header>
+        <h2>People · labels &amp; priority</h2>
+        <button id="people-modal-close" title="Esc">×</button>
+      </header>
+      <p class="people-hint">
+        Drag clusters to reorder priority — top of the Active list = highest priority.
+        Click <em>Exclude</em> to remove a cluster from sorting and chips
+        (e.g. background people or false positives). Photos containing
+        higher-priority people sort to the top within each scene.
+      </p>
+      <div id="people-list"></div>
+      <footer>
+        <button id="people-save">Save</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="modal" class="hidden">
+    <div id="modal-top">
+      <span id="modal-title"></span>
+      <span id="modal-meta"></span>
+      <button id="modal-close" title="Esc">×</button>
+    </div>
+    <div id="modal-image-wrap">
+      <img id="modal-image" alt="" />
+    </div>
+    <div id="modal-bottom">
+      <span id="modal-decision"></span>
+      <span id="modal-scores"></span>
+      <span id="modal-help">[1/R reject] [2/V review] [3/P/A pick] [U undo] [F fit/100%] [←→ nav] [Esc close]</span>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
