@@ -209,11 +209,16 @@
           <input type="text" id="export-target" placeholder="/absolute/path/to/output" />
         </div>
         <div class="export-row">
+          <label>Layout</label>
+          <select id="export-mode">
+            <option value="folder">Preserve folder structure</option>
+            <option value="flat">Flat (auto-rename duplicates)</option>
+            <option value="by_person">Group by people combinations (A, B, A &amp; B, …)</option>
+          </select>
+        </div>
+        <div class="export-row export-mode-hint" id="export-mode-hint">
           <label></label>
-          <label class="cb">
-            <input type="checkbox" id="export-flatten" />
-            Flatten (drop subfolders, auto-rename duplicates)
-          </label>
+          <span class="landing-help" id="export-mode-help"></span>
         </div>
         <div id="export-status"></div>
       </div>

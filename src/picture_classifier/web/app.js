@@ -392,10 +392,23 @@ async function openExportModal() {
   const info = await res.json();
   $("#export-count").textContent = `${info.count} photo${info.count === 1 ? "" : "s"}`;
   $("#export-target").value = info.default_target;
-  $("#export-flatten").checked = false;
+  $("#export-mode").value = "folder";
+  refreshExportModeHelp();
   $("#export-status").textContent = "";
   $("#export-confirm").disabled = info.count === 0;
   $("#export-modal").classList.remove("hidden");
+}
+
+function refreshExportModeHelp() {
+  const mode = $("#export-mode").value;
+  const help = $("#export-mode-help");
+  if (mode === "folder") {
+    help.textContent = "Original subfolder structure (Scene_001/, …) is preserved.";
+  } else if (mode === "flat") {
+    help.textContent = "All picks land directly in the target folder; duplicates get _1, _2 suffixes.";
+  } else {
+    help.textContent = "One subfolder per unique combo of non-excluded people (A/, A & B/, …). Photos with no recognized people go to Others/.";
+  }
 }
 
 function closeExportModal() {
@@ -405,13 +418,13 @@ function closeExportModal() {
 async function confirmExport() {
   const target = $("#export-target").value.trim();
   if (!target) { alert("Target folder is required."); return; }
-  const flatten = $("#export-flatten").checked;
+  const mode = $("#export-mode").value;
   $("#export-confirm").disabled = true;
   $("#export-status").textContent = "Copying…";
   const res = await fetch("/api/export/picks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target_dir: target, flatten }),
+    body: JSON.stringify({ target_dir: target, mode }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -420,9 +433,13 @@ async function confirmExport() {
     return;
   }
   const result = await res.json();
-  $("#export-status").innerHTML =
-    `✓ Copied <b>${result.copied}</b> photos to<br><code>${result.target_dir}</code>` +
-    (result.skipped ? `<br>Skipped ${result.skipped} (missing source).` : "");
+  let html = `✓ Copied <b>${result.copied}</b> photos to<br><code>${result.target_dir}</code>`;
+  if (result.skipped) html += `<br>Skipped ${result.skipped} (missing source).`;
+  if (result.per_combo && Object.keys(result.per_combo).length) {
+    const sorted = Object.entries(result.per_combo).sort((a, b) => b[1] - a[1]);
+    html += `<br><span class="combo-summary">${sorted.map(([k, v]) => `${escapeHtml(k)}: ${v}`).join(" · ")}</span>`;
+  }
+  $("#export-status").innerHTML = html;
   $("#export-confirm").disabled = false;
 }
 
@@ -607,6 +624,7 @@ function bindUi() {
   $("#export-modal-close").addEventListener("click", closeExportModal);
   $("#export-cancel").addEventListener("click", closeExportModal);
   $("#export-confirm").addEventListener("click", confirmExport);
+  $("#export-mode").addEventListener("change", refreshExportModeHelp);
   $("#people-cluster-btn").addEventListener("click", startCluster);
   $("#people-manage-btn").addEventListener("click", openPeopleModal);
   $("#people-modal-close").addEventListener("click", closePeopleModal);

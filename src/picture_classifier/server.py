@@ -63,7 +63,7 @@ class PeoplePayload(BaseModel):
 
 class ExportPayload(BaseModel):
     target_dir: str | None = None
-    flatten: bool = False
+    mode: Literal["folder", "flat", "by_person"] = "folder"
 
 
 class OpenPayload(BaseModel):
@@ -285,6 +285,15 @@ def _native_pick_folder(initial: str | None = None) -> dict[str, Any]:
         return {"path": path or None, "cancelled": not path, "error": None}
     except Exception as exc:
         return {"path": None, "cancelled": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+_PATH_BAD_CHARS = '/\\:*?"<>|\x00'
+
+
+def _sanitize_segment(name: str) -> str:
+    """Make `name` safe to use as a single path segment. Empty → 'unnamed'."""
+    cleaned = "".join("_" if c in _PATH_BAD_CHARS else c for c in name).strip(" .")
+    return cleaned or "unnamed"
 
 
 def _autodetect_jpeg_subdir(photo_dir: Path) -> str:
@@ -656,36 +665,78 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
         )
         target = target.resolve()
         target.mkdir(parents=True, exist_ok=True)
+        mode = payload.mode if payload else "folder"
         picks = [p for p in ctx.data["photos"] if p.get("decision") == "pick"]
+
+        people = ctx.data.get("people", []) or []
+        people_by_id = {p["id"]: p for p in people}
+        excluded_ids = {p["id"] for p in people if p.get("excluded")}
+
+        # Per-target-dir filename uniquifier (used in flat & by_person modes).
+        used_names: dict[Path, set[str]] = {}
+
+        def _unique_name(parent: Path, base: str) -> str:
+            seen = used_names.setdefault(parent, set())
+            stem, suffix = Path(base).stem, Path(base).suffix
+            name = base
+            n = 1
+            while name in seen or (parent / name).exists():
+                name = f"{stem}_{n}{suffix}"
+                n += 1
+            seen.add(name)
+            return name
+
         copied: list[str] = []
         skipped: list[str] = []
-        flatten = bool(payload and payload.flatten)
-        used_names: set[str] = set()
+        per_combo: dict[str, int] = {}
+
         for photo in picks:
             src = ctx.jpeg_root / photo["rel_path"]
             if not src.is_file():
                 skipped.append(photo["rel_path"])
                 continue
-            if flatten:
-                base = Path(photo["rel_path"]).name
-                stem, suffix = Path(base).stem, Path(base).suffix
-                name = base
-                n = 1
-                while name in used_names or (target / name).exists():
-                    name = f"{stem}_{n}{suffix}"
-                    n += 1
-                used_names.add(name)
-                dst = target / name
-            else:
+
+            if mode == "by_person":
+                relevant_pids: list[str] = []
+                seen: set[str] = set()
+                for face in photo.get("faces") or []:
+                    pid = face.get("person_id")
+                    if not pid or pid in excluded_ids or pid in seen:
+                        continue
+                    if pid not in people_by_id:
+                        continue
+                    seen.add(pid)
+                    relevant_pids.append(pid)
+                if not relevant_pids:
+                    combo_label = "Others"
+                else:
+                    relevant_pids.sort(key=lambda pid: (
+                        people_by_id[pid].get("priority", 999), pid
+                    ))
+                    combo_label = " & ".join(
+                        _sanitize_segment(people_by_id[pid].get("label", pid))
+                        for pid in relevant_pids
+                    )
+                combo_dir = target / _sanitize_segment(combo_label)
+                combo_dir.mkdir(parents=True, exist_ok=True)
+                dst = combo_dir / _unique_name(combo_dir, Path(photo["rel_path"]).name)
+                per_combo[combo_label] = per_combo.get(combo_label, 0) + 1
+            elif mode == "flat":
+                dst = target / _unique_name(target, Path(photo["rel_path"]).name)
+            else:  # "folder"
                 dst = target / photo["rel_path"]
                 dst.parent.mkdir(parents=True, exist_ok=True)
+
             shutil.copy2(src, dst)
             copied.append(photo["rel_path"])
+
         return {
             "target_dir": str(target),
             "copied": len(copied),
             "skipped": len(skipped),
             "missing": skipped,
+            "mode": mode,
+            "per_combo": per_combo,
         }
 
     # ----- image serving ---------------------------------------------
