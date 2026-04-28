@@ -780,8 +780,20 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
     return app
 
 
-def serve(db_path: Path | None, host: str, port: int) -> None:
+def serve(db_path: Path | None, host: str, port: int, open_browser: bool = False) -> None:
     import uvicorn
     app = create_app(db_path)
-    print(f"\n  Picture Classifier — open http://{host}:{port}\n")
+    url = f"http://{host}:{port}"
+    print(f"\n  Picture Classifier — open {url}\n")
+    if open_browser:
+        # Wait briefly so the server has a chance to bind before the browser hits it.
+        import threading
+        import time
+        import webbrowser
+
+        def _open() -> None:
+            time.sleep(1.0)
+            webbrowser.open(url)
+
+        threading.Thread(target=_open, daemon=True).start()
     uvicorn.run(app, host=host, port=port, log_level="warning")

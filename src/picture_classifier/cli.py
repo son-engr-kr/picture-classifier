@@ -71,10 +71,16 @@ def score(
     default=8765,
     show_default=True,
 )
-def serve(db_path: Path | None, host: str, port: int) -> None:
+@click.option(
+    "--open/--no-open",
+    "open_browser",
+    default=False,
+    help="Open the web viewer in the default browser after starting.",
+)
+def serve(db_path: Path | None, host: str, port: int, open_browser: bool) -> None:
     """Launch the web viewer. With no DB_PATH the landing page lets you pick a folder."""
     from .server import serve as run_serve
-    run_serve(db_path, host, port)
+    run_serve(db_path, host, port, open_browser=open_browser)
 
 
 @main.command()

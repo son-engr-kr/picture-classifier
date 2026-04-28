@@ -40,6 +40,17 @@ hundred to a few thousand JPEGs. Runs entirely on your machine; no network.
 Pick whichever installer you prefer. The first run downloads the
 `insightface` `buffalo_l` model (~280 MB) into `~/.insightface/`.
 
+### macOS app bundle (no terminal needed)
+
+Grab the latest `.dmg` from
+[Releases](https://github.com/son-engr-kr/picture-classifier/releases),
+drag **Picture Classifier.app** into `/Applications`, and double-click to
+launch. The app opens the landing page in your default browser
+automatically.
+
+Apple Silicon (arm64) only for now. The app is unsigned, so the first
+launch needs **Right-click → Open → Open** to clear Gatekeeper.
+
 ### `uv tool` (cross-platform — macOS, Linux, Windows)
 
 If you don't have [uv](https://github.com/astral-sh/uv) yet:
