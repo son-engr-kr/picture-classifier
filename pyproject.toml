@@ -1,6 +1,6 @@
 [project]
 name = "picture-classifier"
-version = "0.1.1"
+version = "0.1.2"
 description = "Score photos for blur/exposure/face-clustering and cull via local web viewer"
 readme = "README.md"
 license = { file = "LICENSE" }
