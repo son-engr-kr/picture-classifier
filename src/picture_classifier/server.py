@@ -780,13 +780,58 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
     return app
 
 
+def _is_picture_classifier_running(host: str, port: int) -> bool:
+    """Best-effort check: is *our* app already serving on this port?"""
+    import json
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(
+            f"http://{host}:{port}/api/state", timeout=1
+        ) as r:
+            payload = json.loads(r.read().decode("utf-8", errors="replace"))
+        # `/api/state` is unique to our server's API surface.
+        return isinstance(payload, dict) and "ready" in payload and "opening" in payload
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def _pick_free_port(host: str, preferred: int, attempts: int = 20) -> int:
+    """Try sequential ports starting at `preferred`; fall back to an OS-assigned one."""
+    import socket
+    for candidate in range(preferred, preferred + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, candidate))
+                return candidate
+            except OSError:
+                continue
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, 0))
+        return s.getsockname()[1]
+
+
 def serve(db_path: Path | None, host: str, port: int, open_browser: bool = False) -> None:
     import uvicorn
+
+    # If our app is already serving on the requested port, just point the
+    # browser at it instead of failing with EADDRINUSE.
+    if _is_picture_classifier_running(host, port):
+        url = f"http://{host}:{port}"
+        print(f"\n  Picture Classifier is already running — opening {url}\n")
+        if open_browser:
+            import webbrowser
+            webbrowser.open(url)
+        return
+
+    actual_port = _pick_free_port(host, port)
+    if actual_port != port:
+        print(f"  Port {port} is in use; using {actual_port} instead.")
+
     app = create_app(db_path)
-    url = f"http://{host}:{port}"
+    url = f"http://{host}:{actual_port}"
     print(f"\n  Picture Classifier — open {url}\n")
     if open_browser:
-        # Wait briefly so the server has a chance to bind before the browser hits it.
         import threading
         import time
         import webbrowser
@@ -796,4 +841,4 @@ def serve(db_path: Path | None, host: str, port: int, open_browser: bool = False
             webbrowser.open(url)
 
         threading.Thread(target=_open, daemon=True).start()
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=actual_port, log_level="warning")
