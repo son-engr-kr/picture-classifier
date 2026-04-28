@@ -53,7 +53,8 @@ jobs:
           SHA: ${{ steps.sha.outputs.sha }}
         run: |
           set -eu
-          gh repo clone son-engr-kr/homebrew-picture-classifier tap
+          # Embed the token in the remote URL so `git push` is authenticated.
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/son-engr-kr/homebrew-picture-classifier.git" tap
           cd tap
           sed -i -E "s|/refs/tags/v[^\"]+\.tar\.gz|/refs/tags/${TAG}.tar.gz|" Formula/picture-classifier.rb
           sed -i -E "s|sha256 \"[a-f0-9]+\"|sha256 \"${SHA}\"|" Formula/picture-classifier.rb
