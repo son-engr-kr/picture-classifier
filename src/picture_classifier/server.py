@@ -125,6 +125,18 @@ class AppContext:
     def is_loaded(self) -> bool:
         return self.db_path is not None
 
+    def close(self) -> None:
+        """Drop the current project so the landing page is shown again.
+        Caches on disk are kept (cheap to invalidate via mtime checks)."""
+        self.db_path = None
+        self.data = {}
+        self.photo_root = None
+        self.jpeg_root = None
+        self.thumbs_root = None
+        self.faces_root = None
+        self.photo_index = {}
+        self.opening_state = self._fresh_opening_state()
+
     def load_db(self, db_path: Path) -> None:
         """Adopt an existing JSON db file as the current project."""
         db_path = db_path.resolve()
@@ -350,6 +362,13 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
             "photo_root": str(ctx.photo_root) if ctx.photo_root else None,
             "opening": ctx.opening_state,
         }
+
+    @app.post("/api/close")
+    def close_project() -> dict[str, Any]:
+        if ctx.scoring_state["running"] or ctx.cluster_state["running"] or ctx.opening_state["running"]:
+            raise HTTPException(status_code=409, detail="another task is running")
+        ctx.close()
+        return {"ready": False}
 
     @app.post("/api/browse-folder")
     def browse_folder(payload: BrowsePayload | None = None) -> dict[str, Any]:

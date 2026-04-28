@@ -629,8 +629,11 @@ function bindUi() {
   $("#people-manage-btn").addEventListener("click", openPeopleModal);
   $("#people-modal-close").addEventListener("click", closePeopleModal);
   $("#people-save").addEventListener("click", savePeople);
-  $("#switch-project-btn").addEventListener("click", () => {
+  $("#switch-project-btn").addEventListener("click", async () => {
     if (!confirm("Close this project and open a different one?")) return;
+    try {
+      await fetch("/api/close", { method: "POST" });
+    } catch {}
     location.reload();
   });
   $("#scene-mode").addEventListener("change", () => {
