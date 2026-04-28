@@ -14,9 +14,10 @@ import sys
 
 # Static-analysis anchors: do NOT remove. These trigger PyInstaller to bundle
 # the entire dependency graph. Lazy-imported in cli.py at runtime, but bundled
-# here at build time.
-from . import cli, cluster, db, scenes, scorer, server, userstate  # noqa: F401
-from .scoring import blur, exposure, faces  # noqa: F401
+# here at build time. Absolute imports — PyInstaller runs this script as
+# __main__ with no package context, so relative imports would fail.
+from picture_classifier import cli, cluster, db, scenes, scorer, server, userstate  # noqa: F401
+from picture_classifier.scoring import blur, exposure, faces  # noqa: F401
 
 
 def run() -> None:
