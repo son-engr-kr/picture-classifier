@@ -9,6 +9,9 @@ on:
         description: 'Version tag (e.g. v0.1.1) — used for filenames and Info.plist'
         required: true
 
+permissions:
+  contents: write  # needed to create the GitHub Release on tag push
+
 jobs:
   build:
     name: macOS arm64 .app + DMG
