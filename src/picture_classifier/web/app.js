@@ -392,23 +392,10 @@ async function openExportModal() {
   const info = await res.json();
   $("#export-count").textContent = `${info.count} photo${info.count === 1 ? "" : "s"}`;
   $("#export-target").value = info.default_target;
-  $("#export-mode").value = "folder";
-  refreshExportModeHelp();
+  setOptionCardValue("#export-mode-cards", "folder");
   $("#export-status").textContent = "";
   $("#export-confirm").disabled = info.count === 0;
   $("#export-modal").classList.remove("hidden");
-}
-
-function refreshExportModeHelp() {
-  const mode = $("#export-mode").value;
-  const help = $("#export-mode-help");
-  if (mode === "folder") {
-    help.textContent = "Original subfolder structure (Scene_001/, …) is preserved.";
-  } else if (mode === "flat") {
-    help.textContent = "All picks land directly in the target folder; duplicates get _1, _2 suffixes.";
-  } else {
-    help.textContent = "One subfolder per unique combo of non-excluded people (A/, A & B/, …). Photos with no recognized people go to Others/.";
-  }
 }
 
 function closeExportModal() {
@@ -418,7 +405,7 @@ function closeExportModal() {
 async function confirmExport() {
   const target = $("#export-target").value.trim();
   if (!target) { alert("Target folder is required."); return; }
-  const mode = $("#export-mode").value;
+  const mode = getOptionCardValue("#export-mode-cards") || "folder";
   $("#export-confirm").disabled = true;
   $("#export-status").textContent = "Copying…";
   const res = await fetch("/api/export/picks", {
@@ -682,7 +669,11 @@ function bindUi() {
   $("#export-modal-close").addEventListener("click", closeExportModal);
   $("#export-cancel").addEventListener("click", closeExportModal);
   $("#export-confirm").addEventListener("click", confirmExport);
-  $("#export-mode").addEventListener("change", refreshExportModeHelp);
+  $$("#export-mode-cards .option-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      setOptionCardValue("#export-mode-cards", card.dataset.value);
+    });
+  });
   $("#people-cluster-btn").addEventListener("click", startCluster);
   $("#people-manage-btn").addEventListener("click", openPeopleModal);
   $("#people-modal-close").addEventListener("click", closePeopleModal);
@@ -694,9 +685,12 @@ function bindUi() {
     } catch {}
     location.reload();
   });
-  $("#scene-mode").addEventListener("change", () => {
-    syncSceneGroupingControls();
-    applySceneGrouping();
+  $$("#scene-mode-cards .option-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      setOptionCardValue("#scene-mode-cards", card.dataset.value);
+      $("#scene-gap-row").classList.toggle("hidden", card.dataset.value !== "time_gap");
+      applySceneGrouping();
+    });
   });
   $("#scene-gap").addEventListener("change", () => applySceneGrouping());
   $("#landing-open").addEventListener("click", submitOpen);
@@ -1218,16 +1212,26 @@ async function bootMain() {
   else renderMain();
 }
 
+function setOptionCardValue(containerSelector, value) {
+  $$(`${containerSelector} .option-card`).forEach((c) => {
+    c.classList.toggle("active", c.dataset.value === value);
+  });
+}
+
+function getOptionCardValue(containerSelector) {
+  const active = document.querySelector(`${containerSelector} .option-card.active`);
+  return active ? active.dataset.value : null;
+}
+
 function syncSceneGroupingControls() {
   const sg = state.sceneGrouping || { mode: "folder", gap_minutes: 30 };
-  $("#scene-mode").value = sg.mode;
+  setOptionCardValue("#scene-mode-cards", sg.mode);
   $("#scene-gap").value = sg.gap_minutes;
-  $("#scene-gap").style.display = sg.mode === "time_gap" ? "" : "none";
-  $("#scene-grouping .unit").style.display = sg.mode === "time_gap" ? "" : "none";
+  $("#scene-gap-row").classList.toggle("hidden", sg.mode !== "time_gap");
 }
 
 async function applySceneGrouping() {
-  const mode = $("#scene-mode").value;
+  const mode = getOptionCardValue("#scene-mode-cards") || "folder";
   const gap = parseInt($("#scene-gap").value, 10) || 30;
   $("#score-title").textContent = "Regrouping scenes…";
   $("#score-progress").classList.remove("hidden");

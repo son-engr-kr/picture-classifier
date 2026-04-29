@@ -96,15 +96,33 @@ code { background: var(--bg-3); padding: 1px 4px; border-radius: 3px; font-size:
   display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 #sidebar header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border);
   display: flex; flex-direction: column; gap: 6px; }
-#scene-grouping { display: flex; align-items: center; gap: 6px; font-size: 11px;
-  color: var(--fg-dim); }
-#scene-grouping select { background: var(--bg-3); color: var(--fg);
-  border: 1px solid var(--border); border-radius: 3px; padding: 2px 4px;
-  font: inherit; font-size: 11px; }
-#scene-grouping input[type="number"] { width: 50px; background: var(--bg-3);
+#scene-grouping { display: flex; flex-direction: column; gap: 6px;
+  font-size: 11px; color: var(--fg-dim); }
+#scene-grouping .section-label { font-size: 10px; font-weight: 600;
+  letter-spacing: 0.4px; text-transform: uppercase; color: var(--fg-dim); }
+#scene-gap-row { display: flex; align-items: center; gap: 6px;
+  padding-top: 2px; }
+#scene-gap-row.hidden { display: none; }
+#scene-gap-row label { font-size: 10px; color: var(--fg-dim); }
+#scene-gap-row input[type="number"] { width: 56px; background: var(--bg-3);
   color: var(--fg); border: 1px solid var(--border); border-radius: 3px;
   padding: 2px 4px; font: inherit; font-size: 11px; }
-#scene-grouping .unit { font-size: 10px; }
+#scene-gap-row .unit { font-size: 10px; }
+
+/* ---------- Option cards (reusable) ---------- */
+.option-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.option-cards-wide { grid-template-columns: 1fr; }
+.option-card { display: flex; flex-direction: column; align-items: flex-start;
+  gap: 3px; padding: 8px 10px; background: var(--bg-3);
+  border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+  text-align: left; color: var(--fg); transition: border-color 0.08s, background 0.08s; }
+.option-card:hover { background: #2a2a30; border-color: #4a4a55; }
+.option-card.active { border-color: var(--accent); background: #1f3252;
+  box-shadow: 0 0 0 1px var(--accent) inset; }
+.option-card .option-icon { color: var(--accent); margin-bottom: 2px; line-height: 0; }
+.option-card .option-title { font-size: 11px; font-weight: 600; color: var(--fg); }
+.option-card .option-sub { font-size: 10px; color: var(--fg-dim); line-height: 1.4; }
+.option-card.active .option-sub { color: var(--fg); opacity: 0.85; }
 #switch-project-btn { padding: 3px 8px; font-size: 11px; align-self: flex-start; }
 #sidebar h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600;
   letter-spacing: 0.5px; text-transform: uppercase; color: var(--fg-dim); }

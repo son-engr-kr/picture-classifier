@@ -106,13 +106,44 @@
       <h1>Scenes</h1>
       <div id="overall-progress"></div>
       <div id="scene-grouping">
-        <label>Group:</label>
-        <select id="scene-mode">
-          <option value="folder">By folder</option>
-          <option value="time_gap">By time gap</option>
-        </select>
-        <input type="number" id="scene-gap" value="30" min="1" title="Minutes" />
-        <span class="unit">min</span>
+        <span class="section-label">Group scenes</span>
+        <div class="option-cards" id="scene-mode-cards">
+          <button class="option-card" type="button" data-value="folder">
+            <span class="option-icon">
+              <svg viewBox="0 0 36 24" width="36" height="24" aria-hidden="true">
+                <rect x="1" y="6" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="13" y="6" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="25" y="6" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                <circle cx="6" cy="12" r="1" fill="currentColor"/>
+                <circle cx="18" cy="12" r="1" fill="currentColor"/>
+                <circle cx="30" cy="12" r="1" fill="currentColor"/>
+              </svg>
+            </span>
+            <span class="option-title">By folder</span>
+            <span class="option-sub">Each subfolder = a scene</span>
+          </button>
+          <button class="option-card" type="button" data-value="time_gap">
+            <span class="option-icon">
+              <svg viewBox="0 0 40 24" width="40" height="24" aria-hidden="true">
+                <line x1="1" y1="20" x2="39" y2="20" stroke="currentColor" stroke-width="1"/>
+                <circle cx="4" cy="20" r="2" fill="currentColor"/>
+                <circle cx="7" cy="20" r="2" fill="currentColor"/>
+                <circle cx="10" cy="20" r="2" fill="currentColor"/>
+                <circle cx="22" cy="20" r="2" fill="currentColor"/>
+                <circle cx="25" cy="20" r="2" fill="currentColor"/>
+                <circle cx="34" cy="20" r="2" fill="currentColor"/>
+                <text x="14" y="11" font-size="6" fill="currentColor" opacity="0.7">↤ gap ↦</text>
+              </svg>
+            </span>
+            <span class="option-title">By time gap</span>
+            <span class="option-sub">EXIF capture-time clusters</span>
+          </button>
+        </div>
+        <div id="scene-gap-row" class="hidden">
+          <label for="scene-gap">Gap</label>
+          <input type="number" id="scene-gap" value="30" min="1" />
+          <span class="unit">minutes</span>
+        </div>
       </div>
       <button id="switch-project-btn" title="Open a different project">⇄ switch project</button>
     </header>
@@ -214,17 +245,22 @@
           <label>Target folder</label>
           <input type="text" id="export-target" placeholder="/absolute/path/to/output" />
         </div>
-        <div class="export-row">
+        <div class="export-row" style="align-items:flex-start;">
           <label>Layout</label>
-          <select id="export-mode">
-            <option value="folder">Preserve folder structure</option>
-            <option value="flat">Flat (auto-rename duplicates)</option>
-            <option value="by_person">Group by people combinations (A, B, A &amp; B, …)</option>
-          </select>
-        </div>
-        <div class="export-row export-mode-hint" id="export-mode-hint">
-          <label></label>
-          <span class="landing-help" id="export-mode-help"></span>
+          <div class="option-cards option-cards-wide" id="export-mode-cards">
+            <button class="option-card" type="button" data-value="folder">
+              <span class="option-title">Preserve folder structure</span>
+              <span class="option-sub">Mirror Scene_001/, Scene_002/… as in the source.</span>
+            </button>
+            <button class="option-card" type="button" data-value="flat">
+              <span class="option-title">Flat</span>
+              <span class="option-sub">All picks go directly into the target folder. Duplicates get _1, _2 suffixes.</span>
+            </button>
+            <button class="option-card" type="button" data-value="by_person">
+              <span class="option-title">By people combinations</span>
+              <span class="option-sub">One subfolder per unique combo of non-excluded faces (A/, A &amp; B/…). Unidentified photos go to Others/.</span>
+            </button>
+          </div>
         </div>
         <div id="export-status"></div>
       </div>
