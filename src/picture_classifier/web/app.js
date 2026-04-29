@@ -1191,6 +1191,80 @@ async function openLegacyDb(entry) {
   showOpenProgress("Opening project…");
 }
 
+// ---------- inline help ----------
+const HELP_CONTENT = {
+  "scene-grouping": `
+    <h3>How scenes are grouped</h3>
+    <p><b>By folder</b> — each subdirectory under your photo folder
+    becomes one scene. Use this if you organized shots into folders.</p>
+    <p><b>By time gap</b> — reads EXIF capture time and starts a new scene
+    after a configurable gap. Good for an unsorted dump.</p>
+    <p>You can switch any time without re-scoring; only auto-suggestions are
+    recomputed within each new scene.</p>`,
+  "people": `
+    <h3>Drag to set priority, click <i>Exclude</i> to ignore</h3>
+    <p>The top of the <b>Active</b> list is the highest priority. Photos
+    containing higher-priority people sort to the top within each scene.</p>
+    <p>Clicking <b>Exclude</b> on a cluster moves it to the Excluded section.
+    Excluded clusters are ignored for sorting and filtering, and their face
+    crops are hidden in the grid — but the photos themselves still show.</p>
+    <p>Re-clustering (↻ in the sidebar) resets labels and priorities because
+    face indices change. Decisions per photo are kept.</p>`,
+};
+
+function openHelp(key, anchor) {
+  const popover = $("#help-popover");
+  const body = $("#help-popover-body");
+  body.innerHTML = HELP_CONTENT[key] || `<p>No help written for "${key}".</p>`;
+  popover.classList.remove("hidden");
+  // Position near the anchor; clamp into viewport.
+  const rect = anchor.getBoundingClientRect();
+  const padding = 12;
+  popover.style.left = "auto";
+  popover.style.right = "auto";
+  popover.style.top = (rect.bottom + 6) + "px";
+  popover.style.left = Math.max(padding, rect.left - 80) + "px";
+  popover.style.maxWidth = "min(360px, calc(100vw - 24px))";
+  // If overflowing on the right, nudge back.
+  const popRect = popover.getBoundingClientRect();
+  if (popRect.right > window.innerWidth - padding) {
+    popover.style.left = (window.innerWidth - popRect.width - padding) + "px";
+  }
+}
+
+function closeHelp() {
+  $("#help-popover").classList.add("hidden");
+}
+
+function bindHelp() {
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".help-btn");
+    if (btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openHelp(btn.dataset.help, btn);
+      return;
+    }
+    if (!e.target.closest("#help-popover")) closeHelp();
+  });
+  $("#help-popover-close").addEventListener("click", closeHelp);
+}
+
+// ---------- welcome banner ----------
+const WELCOME_BANNER_KEY = "pcls.welcomeBannerSeen";
+
+function maybeShowWelcomeBanner() {
+  try {
+    if (localStorage.getItem(WELCOME_BANNER_KEY) === "1") return;
+  } catch {}
+  $("#welcome-banner").classList.remove("hidden");
+}
+
+function dismissWelcomeBanner() {
+  $("#welcome-banner").classList.add("hidden");
+  try { localStorage.setItem(WELCOME_BANNER_KEY, "1"); } catch {}
+}
+
 // ---------- new-project wizard ----------
 const wizardState = { step: 1, sceneMode: "folder", defaultProjectsRoot: null };
 
@@ -1379,6 +1453,7 @@ async function bootMain() {
   syncSceneGroupingControls();
   if (state.sceneOrder.length) selectScene(state.sceneOrder[0]);
   else renderMain();
+  maybeShowWelcomeBanner();
 }
 
 function setOptionCardValue(containerSelector, value) {
@@ -1425,6 +1500,8 @@ async function applySceneGrouping() {
 (async () => {
   bindUi();
   bindKeys();
+  bindHelp();
+  $("#welcome-banner-dismiss").addEventListener("click", dismissWelcomeBanner);
   let s;
   try { s = await fetchState(); } catch { showLanding(); return; }
   if (s.opening && s.opening.running) {

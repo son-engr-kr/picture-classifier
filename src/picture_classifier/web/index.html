@@ -136,7 +136,10 @@
       <h1>Scenes</h1>
       <div id="overall-progress"></div>
       <div id="scene-grouping">
-        <span class="section-label">Group scenes</span>
+        <span class="section-label">
+          Group scenes
+          <button class="help-btn" type="button" data-help="scene-grouping" title="What is this?">?</button>
+        </span>
         <div class="option-cards" id="scene-mode-cards">
           <button class="option-card" type="button" data-value="folder">
             <span class="option-icon">
@@ -241,6 +244,19 @@
     </div>
   </main>
 
+  <div id="welcome-banner" class="hidden">
+    <span id="welcome-banner-text">
+      💡 Tip: you can change scene grouping (by folder vs time gap) any time
+      from the sidebar. Exclude irrelevant face clusters with the ⚙ button.
+    </span>
+    <button id="welcome-banner-dismiss" type="button">Got it</button>
+  </div>
+
+  <div id="help-popover" class="hidden" role="dialog">
+    <div id="help-popover-body"></div>
+    <button id="help-popover-close" type="button" title="Close">×</button>
+  </div>
+
   <div id="undo-toast" class="hidden">
     <span id="undo-toast-msg"></span>
     <button id="undo-toast-btn" type="button">Undo <span class="kbd">⌘Z</span></button>
@@ -304,7 +320,9 @@
   <div id="people-modal" class="hidden">
     <div class="people-box">
       <header>
-        <h2>People · labels &amp; priority</h2>
+        <h2>People · labels &amp; priority
+          <button class="help-btn" type="button" data-help="people" title="What is this?">?</button>
+        </h2>
         <button id="people-modal-close" title="Esc">×</button>
       </header>
       <p class="people-hint">

@@ -326,6 +326,41 @@ code { background: var(--bg-3); padding: 1px 4px; border-radius: 3px; font-size:
   font-size: 10px; color: var(--fg-dim); margin-top: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ---------- Welcome banner ---------- */
+#welcome-banner { position: fixed; top: 0; left: 280px; right: 0;
+  background: #1f3252; color: var(--fg); padding: 8px 14px;
+  border-bottom: 1px solid var(--accent); display: flex; align-items: center;
+  gap: 10px; z-index: 50; font-size: 12px; }
+#welcome-banner.hidden { display: none; }
+#welcome-banner-text { flex: 1; }
+#welcome-banner-dismiss { padding: 3px 12px; font-size: 11px;
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  font-weight: 600; }
+#welcome-banner-dismiss:hover { background: #5aa0f0; }
+body.landing-mode #welcome-banner { display: none !important; }
+
+/* ---------- Help popover ---------- */
+.help-btn { display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; padding: 0; margin-left: 4px;
+  border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--fg-dim); font-size: 9px; font-weight: 600; line-height: 1;
+  cursor: help; vertical-align: 0; }
+.help-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+#help-popover { position: fixed; z-index: 250; background: var(--bg-2);
+  border: 1px solid var(--accent); border-radius: 6px;
+  padding: 14px 16px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  min-width: 240px; max-width: 360px; }
+#help-popover.hidden { display: none; }
+#help-popover h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600;
+  color: var(--accent); }
+#help-popover p { margin: 0 0 6px; font-size: 12px; line-height: 1.55;
+  color: var(--fg); }
+#help-popover p:last-child { margin-bottom: 0; }
+#help-popover-close { position: absolute; top: 4px; right: 6px;
+  background: transparent; border: none; color: var(--fg-dim);
+  font-size: 16px; padding: 0 6px; line-height: 1; }
+#help-popover-close:hover { color: var(--fg); }
+
 /* ---------- Undo toast ---------- */
 #undo-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
   background: var(--bg-2); color: var(--fg); border: 1px solid var(--border);
