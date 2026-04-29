@@ -451,16 +451,15 @@ async function rejectUndecidedInScene() {
   if (!targets.length) return;
   const ok = confirm(
     `Reject all ${targets.length} undecided photos in "${state.selectedScene}"?\n` +
-    `This can be undone per-photo with U.`
+    `Use the Undo toast (or ⌘Z) to revert.`
   );
   if (!ok) return;
+  const sceneLabel = state.selectedScene;
+  const relPaths = targets.map((p) => p.rel_path);
   const res = await fetch("/api/decide/bulk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      rel_paths: targets.map((p) => p.rel_path),
-      decision: "reject",
-    }),
+    body: JSON.stringify({ rel_paths: relPaths, decision: "reject" }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -471,6 +470,56 @@ async function rejectUndecidedInScene() {
   for (const p of targets) {
     p.decision = "reject";
     p.decided_at = now;
+  }
+  recomputeFilter();
+  renderSidebar();
+  renderMain();
+  showUndoToast(
+    `Rejected ${relPaths.length} undecided photos in "${sceneLabel}".`,
+    relPaths,
+  );
+}
+
+// ---------- undo toast ----------
+const undoToast = { paths: null, timer: null };
+
+function showUndoToast(msg, relPaths) {
+  if (undoToast.timer) clearTimeout(undoToast.timer);
+  undoToast.paths = relPaths;
+  $("#undo-toast-msg").textContent = msg;
+  $("#undo-toast").classList.remove("hidden");
+  undoToast.timer = setTimeout(hideUndoToast, 12000);
+}
+
+function hideUndoToast() {
+  $("#undo-toast").classList.add("hidden");
+  undoToast.paths = null;
+  if (undoToast.timer) {
+    clearTimeout(undoToast.timer);
+    undoToast.timer = null;
+  }
+}
+
+async function performUndo() {
+  if (!undoToast.paths || !undoToast.paths.length) return;
+  const paths = undoToast.paths;
+  hideUndoToast();
+  const res = await fetch("/api/decide/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rel_paths: paths, decision: null }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert("Undo failed: " + (err.detail || res.status));
+    return;
+  }
+  for (const rp of paths) {
+    const photo = state.photos.find((p) => p.rel_path === rp);
+    if (photo) {
+      photo.decision = null;
+      photo.decided_at = null;
+    }
   }
   recomputeFilter();
   renderSidebar();
@@ -525,6 +574,15 @@ function modalNav(delta) {
 // ---------- keyboard ----------
 function bindKeys() {
   document.addEventListener("keydown", async (e) => {
+    // ⌘Z (or Ctrl+Z) restores the last bulk-decide action.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey
+        && (e.key === "z" || e.key === "Z")) {
+      if (undoToast.paths && undoToast.paths.length) {
+        e.preventDefault();
+        performUndo();
+        return;
+      }
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key;
 
@@ -646,6 +704,8 @@ function bindUi() {
     if (e.key === "Enter") submitOpen();
   });
   $("#landing-browse").addEventListener("click", browseFolder);
+  $("#undo-toast-btn").addEventListener("click", performUndo);
+  $("#undo-toast-close").addEventListener("click", hideUndoToast);
 }
 
 // ---------- People modal ----------

@@ -264,6 +264,22 @@ code { background: var(--bg-3); padding: 1px 4px; border-radius: 3px; font-size:
   font-size: 10px; color: var(--fg-dim); margin-top: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ---------- Undo toast ---------- */
+#undo-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: var(--bg-2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+  padding: 10px 12px 10px 16px; display: flex; align-items: center; gap: 12px;
+  z-index: 220; max-width: 720px; font-size: 12px; }
+#undo-toast.hidden { display: none; }
+#undo-toast-msg { flex: 1; }
+#undo-toast-btn { padding: 4px 10px; font-size: 11px; font-weight: 600; }
+#undo-toast-btn .kbd { display: inline-block; margin-left: 6px; padding: 1px 5px;
+  border: 1px solid currentColor; border-radius: 3px; font-size: 9px;
+  font-weight: 600; opacity: 0.6; }
+#undo-toast-close { padding: 0 8px; font-size: 14px; line-height: 1;
+  border: none; background: transparent; color: var(--fg-dim); }
+#undo-toast-close:hover { color: var(--fg); }
+
 /* ---------- Scoring progress overlay ---------- */
 #score-progress { position: fixed; inset: 0; background: rgba(0,0,0,0.85);
   display: flex; align-items: center; justify-content: center; z-index: 200; }
