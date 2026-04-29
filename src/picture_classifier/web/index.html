@@ -15,89 +15,119 @@
       </header>
 
       <section class="landing-card">
-        <h2>Open a project</h2>
-        <p class="landing-hint">
-          Pick a folder containing your photos. The app scans for
-          <code>.jpg</code>, <code>.jpeg</code>, <code>.png</code> and creates
-          (or reloads) a <code>picks.json</code> file inside that folder.
-        </p>
-
-        <div class="landing-row">
-          <label for="landing-photo-dir">Photo folder</label>
-          <input type="text" id="landing-photo-dir" placeholder="Click Browse… or paste an absolute path" autofocus />
-          <button type="button" id="landing-browse" class="browse-btn">Browse…</button>
+        <h2>Start</h2>
+        <div class="start-cards">
+          <button class="start-card" id="start-new" type="button">
+            <span class="start-icon">＋</span>
+            <span class="start-title">New project</span>
+            <span class="start-sub">Pick a photo folder, name it, and we'll score it.</span>
+          </button>
+          <button class="start-card" id="start-open" type="button">
+            <span class="start-icon">📂</span>
+            <span class="start-title">Open project</span>
+            <span class="start-sub">Reopen a project folder you already created.</span>
+          </button>
         </div>
-
-        <details class="landing-advanced">
-          <summary>Advanced</summary>
-          <div class="landing-row">
-            <label for="landing-jpeg-subdir">JPEG subfolder</label>
-            <input type="text" id="landing-jpeg-subdir" placeholder="(leave empty for flat)" />
-            <span class="landing-help">If your JPEGs live in a subfolder like <code>JPEG/</code>, enter its name.</span>
-          </div>
-          <div class="landing-row">
-            <label for="landing-db-path">DB path</label>
-            <input type="text" id="landing-db-path" placeholder="(default: <photo folder>/picks.json)" />
-          </div>
-        </details>
-
-        <div class="landing-actions">
-          <button id="landing-open" class="primary">Open</button>
-          <span id="landing-status"></span>
-        </div>
+        <span id="landing-status"></span>
       </section>
 
       <section class="landing-card">
         <h2>Recent</h2>
         <div id="landing-recents"></div>
       </section>
+    </div>
+  </div>
 
-      <section class="landing-card">
-        <h2>Expected folder layouts</h2>
-        <p class="landing-hint">
-          Both layouts are supported. You can switch how scenes are grouped
-          (by folder vs. by capture-time gap) any time after opening.
-        </p>
-        <div class="layout-diagrams">
-          <div class="layout-diagram">
-            <h3>Flat</h3>
-            <div class="folder-tree">
-<pre>📁 my-photos/
-   🖼 IMG_0001.JPG
-   🖼 IMG_0002.JPG
-   🖼 IMG_0003.JPG
-   …
-   🗒 picks.json   <span class="auto">(auto-created)</span></pre>
-            </div>
-            <p class="layout-note">Use <b>time-gap</b> grouping later to auto-split into scenes.</p>
+  <div id="wizard" class="hidden">
+    <div class="wizard-shell">
+      <header class="wizard-header">
+        <h2 id="wizard-title">New project</h2>
+        <span id="wizard-step-indicator">Step 1 of 4</span>
+        <button id="wizard-close" type="button" title="Cancel">×</button>
+      </header>
+      <div class="wizard-body">
+        <section class="wizard-step" data-step="1">
+          <h3>1. Where are your photos?</h3>
+          <p class="wizard-hint">
+            Pick the folder that contains the JPEGs you want to triage.
+            Sub-folders are scanned recursively. Videos and RAW files are
+            ignored automatically.
+          </p>
+          <div class="landing-row">
+            <label>Photo folder</label>
+            <input type="text" id="wiz-photo-dir" placeholder="/path/to/photos" />
+            <button type="button" class="browse-btn" id="wiz-photo-browse">Browse…</button>
           </div>
-          <div class="layout-diagram">
-            <h3>Pre-grouped folders</h3>
-            <div class="folder-tree">
-<pre>📁 wedding-2025/
-   📁 Scene_001/
-      🖼 IMG_0001.JPG
-      🖼 IMG_0002.JPG
-   📁 Scene_002/
-      🖼 …
-   🗒 picks.json   <span class="auto">(auto-created)</span></pre>
+          <details class="landing-advanced">
+            <summary>Advanced</summary>
+            <div class="landing-row">
+              <label>JPEG subfolder</label>
+              <input type="text" id="wiz-jpeg-subdir" placeholder="(leave empty unless RAWs live alongside)" />
+              <span class="landing-help">If JPEGs live under <code>JPEG/</code>, enter that name.</span>
             </div>
-            <p class="layout-note">Folder names become scene names automatically.</p>
+          </details>
+        </section>
+
+        <section class="wizard-step hidden" data-step="2">
+          <h3>2. Where should the project live?</h3>
+          <p class="wizard-hint">
+            A project folder keeps your decisions, caches, and config together,
+            separate from the photos. You can move it later without affecting
+            the photos.
+          </p>
+          <div class="landing-row">
+            <label>Project name</label>
+            <input type="text" id="wiz-project-name" placeholder="wedding-2025" />
           </div>
-          <div class="layout-diagram">
-            <h3>Photo dir + JPEG subfolder</h3>
-            <div class="folder-tree">
-<pre>📁 shoot/
-   📁 RAW/
-   📁 JPEG/         <span class="auto">← set "JPEG subfolder"</span>
-      📁 Scene_001/
-         🖼 IMG_0001.JPG
-   🗒 picks.json   <span class="auto">(at shoot/)</span></pre>
-            </div>
-            <p class="layout-note">For workflows where RAWs and JPEGs live side-by-side.</p>
+          <div class="landing-row">
+            <label>Project folder</label>
+            <input type="text" id="wiz-project-dir" placeholder="(auto-filled)" />
+            <button type="button" class="browse-btn" id="wiz-project-browse">Browse…</button>
           </div>
-        </div>
-      </section>
+          <p class="landing-help" style="padding-left:120px;">
+            Default: <code>~/PictureClassifier-Projects/&lt;name&gt;/</code>.
+          </p>
+        </section>
+
+        <section class="wizard-step hidden" data-step="3">
+          <h3>3. How should scenes be grouped?</h3>
+          <p class="wizard-hint">
+            Scenes are how the photos are bucketed in the sidebar. Auto-suggestions
+            (top 30% pick, bottom 30% reject) are computed within each scene.
+            You can change this later without re-scoring.
+          </p>
+          <div class="option-cards" id="wiz-scene-cards">
+            <button class="option-card active" type="button" data-value="folder">
+              <span class="option-title">By folder</span>
+              <span class="option-sub">Each subfolder under your photo folder becomes one scene. Use this if you already organized shots into folders.</span>
+            </button>
+            <button class="option-card" type="button" data-value="time_gap">
+              <span class="option-title">By time gap</span>
+              <span class="option-sub">Reads EXIF capture time and starts a new scene when there is a long pause (configurable). Good for unsorted dumps.</span>
+            </button>
+          </div>
+          <div class="landing-row" id="wiz-gap-row" style="margin-top:8px;display:none;">
+            <label>Gap</label>
+            <input type="number" id="wiz-gap" value="30" min="1" />
+            <span class="unit">minutes</span>
+          </div>
+        </section>
+
+        <section class="wizard-step hidden" data-step="4">
+          <h3>4. Ready to create?</h3>
+          <p class="wizard-hint">
+            Review the settings. The first run scores every photo and clusters
+            faces, which can take a few minutes for a thousand photos.
+          </p>
+          <dl class="wizard-summary" id="wiz-summary"></dl>
+        </section>
+      </div>
+      <footer class="wizard-footer">
+        <button id="wizard-back" type="button">Back</button>
+        <span class="spacer"></span>
+        <button id="wizard-next" type="button" class="primary">Next</button>
+        <button id="wizard-create" type="button" class="primary hidden">Create project</button>
+      </footer>
     </div>
   </div>
 

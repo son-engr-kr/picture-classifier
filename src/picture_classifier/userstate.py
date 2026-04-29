@@ -36,24 +36,46 @@ def get_last_db_path() -> Path | None:
     return Path(p) if p else None
 
 
-def remember_open(db_path: Path, photo_dir: Path, jpeg_subdir: str) -> None:
+def remember_open(
+    db_path: Path,
+    photo_dir: Path,
+    jpeg_subdir: str,
+    *,
+    kind: str = "legacy",
+    project_dir: Path | None = None,
+) -> None:
     data = _load()
-    entry = {
+    entry: dict[str, Any] = {
+        "kind": kind,
         "db_path": str(db_path),
         "photo_dir": str(photo_dir),
         "jpeg_subdir": jpeg_subdir,
         "opened_at": datetime.now().isoformat(),
     }
-    recents = [r for r in data.get("recents", []) if r.get("db_path") != str(db_path)]
+    if project_dir is not None:
+        entry["project_dir"] = str(project_dir)
+        entry["name"] = project_dir.name
+    else:
+        entry["name"] = photo_dir.name
+
+    def _key(r: dict[str, Any]) -> str:
+        return r.get("project_dir") or r.get("db_path") or ""
+    new_key = entry.get("project_dir") or entry["db_path"]
+    recents = [r for r in data.get("recents", []) if _key(r) != new_key]
     recents.insert(0, entry)
     data["recents"] = recents[:MAX_RECENTS]
     data["last_db_path"] = str(db_path)
     _save(data)
 
 
-def forget(db_path: Path) -> None:
+def forget(key: Path) -> None:
+    """Remove a recent entry. `key` may be a db_path or project_dir."""
     data = _load()
-    data["recents"] = [r for r in data.get("recents", []) if r.get("db_path") != str(db_path)]
-    if data.get("last_db_path") == str(db_path):
+    s = str(key)
+    data["recents"] = [
+        r for r in data.get("recents", [])
+        if r.get("db_path") != s and r.get("project_dir") != s
+    ]
+    if data.get("last_db_path") == s:
         data["last_db_path"] = None
     _save(data)

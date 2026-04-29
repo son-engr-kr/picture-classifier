@@ -693,11 +693,35 @@ function bindUi() {
     });
   });
   $("#scene-gap").addEventListener("change", () => applySceneGrouping());
-  $("#landing-open").addEventListener("click", submitOpen);
-  $("#landing-photo-dir").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitOpen();
+  $("#start-new").addEventListener("click", openWizard);
+  $("#start-open").addEventListener("click", pickAndOpenProject);
+  $("#wizard-close").addEventListener("click", () => {
+    if (confirm("Cancel project setup?")) closeWizard();
   });
-  $("#landing-browse").addEventListener("click", browseFolder);
+  $("#wizard-back").addEventListener("click", () => {
+    if (wizardState.step > 1) showWizardStep(wizardState.step - 1);
+  });
+  $("#wizard-next").addEventListener("click", () => {
+    const ok = validateWizardStep(wizardState.step);
+    if (ok !== true) { alert(ok); return; }
+    if (wizardState.step === 1) autoFillProjectFields();
+    if (wizardState.step < 4) showWizardStep(wizardState.step + 1);
+  });
+  $("#wizard-create").addEventListener("click", createProject);
+  $("#wiz-photo-browse").addEventListener("click", () =>
+    nativeBrowse($("#wiz-photo-dir"), null).then(autoFillProjectFields));
+  $("#wiz-project-browse").addEventListener("click", () =>
+    nativeBrowse($("#wiz-project-dir"), null));
+  $("#wiz-project-name").addEventListener("input", syncProjectDirFromName);
+  $$("#wiz-scene-cards .option-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      wizardState.sceneMode = card.dataset.value;
+      $$("#wiz-scene-cards .option-card").forEach((c) =>
+        c.classList.toggle("active", c === card));
+      $("#wiz-gap-row").style.display =
+        card.dataset.value === "time_gap" ? "" : "none";
+    });
+  });
   $("#undo-toast-btn").addEventListener("click", performUndo);
   $("#undo-toast-close").addEventListener("click", hideUndoToast);
 }
@@ -1056,24 +1080,31 @@ async function renderRecents() {
     const item = document.createElement("div");
     item.className = "recent-item";
     const opened = r.opened_at ? new Date(r.opened_at).toLocaleString() : "—";
+    const isProject = r.kind === "project" && r.project_dir;
+    const name = r.name || basename(r.photo_dir || r.project_dir || "");
+    const pathLine = isProject
+      ? `<div class="recent-path">📂 ${escapeHtml(r.project_dir)}</div>
+         <div class="recent-path dim">photos: ${escapeHtml(r.photo_dir || "")}${r.jpeg_subdir ? ` / ${escapeHtml(r.jpeg_subdir)}` : ""}</div>`
+      : `<div class="recent-path">${escapeHtml(r.photo_dir || "")}${r.jpeg_subdir ? ` <span class="dim">/ ${escapeHtml(r.jpeg_subdir)}</span>` : ""}</div>`;
     item.innerHTML = `
       <button class="recent-open" type="button">
-        <div class="recent-name">${escapeHtml(basename(r.photo_dir))}</div>
-        <div class="recent-path">${escapeHtml(r.photo_dir)}${r.jpeg_subdir ? ` <span class="dim">/ ${escapeHtml(r.jpeg_subdir)}</span>` : ""}</div>
+        <div class="recent-name">${isProject ? "" : "<span class='legacy-tag'>legacy</span> "}${escapeHtml(name)}</div>
+        ${pathLine}
         <div class="recent-meta">${opened}</div>
       </button>
       <button class="recent-forget" type="button" title="Remove from recents">×</button>`;
     item.querySelector(".recent-open").addEventListener("click", () => {
-      $("#landing-photo-dir").value = r.photo_dir;
-      $("#landing-jpeg-subdir").value = r.jpeg_subdir || "";
-      $("#landing-db-path").value = r.db_path || "";
-      submitOpen();
+      if (isProject) openProjectByDir(r.project_dir);
+      else openLegacyDb(r);
     });
     item.querySelector(".recent-forget").addEventListener("click", async () => {
       await fetch("/api/recents/forget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ db_path: r.db_path }),
+        body: JSON.stringify({
+          project_dir: isProject ? r.project_dir : null,
+          db_path: r.db_path || null,
+        }),
       });
       renderRecents();
     });
@@ -1091,13 +1122,9 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-async function browseFolder() {
-  const btn = $("#landing-browse");
-  const status = $("#landing-status");
-  btn.disabled = true;
-  btn.textContent = "Choose…";
-  status.textContent = "Opening Finder dialog… (check the Dock if it didn't pop forward)";
-  const initial = $("#landing-photo-dir").value.trim() || null;
+async function nativeBrowse(targetInput, status) {
+  const initial = targetInput.value.trim() || null;
+  if (status) status.textContent = "Opening Finder dialog…";
   try {
     const res = await fetch("/api/browse-folder", {
       method: "POST",
@@ -1105,61 +1132,203 @@ async function browseFolder() {
       body: JSON.stringify({ initial }),
     });
     if (!res.ok) {
-      status.textContent = `Browse endpoint failed (${res.status}). Restart the server: pcls serve`;
+      if (status) status.textContent = `Browse endpoint failed (${res.status}).`;
       return;
     }
     const result = await res.json();
-    if (result.path) {
-      $("#landing-photo-dir").value = result.path;
-      status.textContent = "";
-    } else if (result.cancelled) {
-      status.textContent = "";
-    } else if (result.error) {
-      status.textContent = "Browse failed: " + result.error;
-    } else {
-      status.textContent = "";
+    if (result.path) targetInput.value = result.path;
+    if (status) {
+      if (result.error) status.textContent = "Browse failed: " + result.error;
+      else status.textContent = "";
     }
   } catch (err) {
-    status.textContent = "Browse network error: " + err.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Browse…";
+    if (status) status.textContent = "Browse network error: " + err.message;
   }
 }
 
-async function submitOpen() {
-  const photoDir = $("#landing-photo-dir").value.trim();
-  if (!photoDir) {
-    $("#landing-status").textContent = "Please enter a folder path.";
-    return;
-  }
-  const jpegSubdir = $("#landing-jpeg-subdir").value.trim();
-  const dbPath = $("#landing-db-path").value.trim();
-  $("#landing-status").textContent = "Starting…";
-  $("#landing-open").disabled = true;
-  const res = await fetch("/api/open", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      photo_dir: photoDir,
-      jpeg_subdir: jpegSubdir,
-      db_path: dbPath || null,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    $("#landing-status").textContent = "Failed: " + (err.detail || res.status);
-    $("#landing-open").disabled = false;
-    return;
-  }
-  // Show progress overlay; landing stays hidden until project becomes ready.
+function showOpenProgress(title) {
   hideLanding();
-  $("#score-title").textContent = "Opening project…";
+  closeWizard();
+  $("#score-title").textContent = title;
   $("#score-progress").classList.remove("hidden");
   $("#score-bar-fill").style.width = "0%";
   $("#score-progress-text").textContent = "starting…";
   $("#score-current").textContent = "";
   pollOpenStatus();
+}
+
+async function openProjectByDir(projectDir) {
+  $("#landing-status").textContent = "Opening project…";
+  const res = await fetch("/api/project/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_dir: projectDir }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    $("#landing-status").textContent = "Failed: " + (err.detail || res.status);
+    return;
+  }
+  showOpenProgress("Opening project…");
+}
+
+async function openLegacyDb(entry) {
+  $("#landing-status").textContent = "Opening project…";
+  const res = await fetch("/api/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      photo_dir: entry.photo_dir,
+      jpeg_subdir: entry.jpeg_subdir || "",
+      db_path: entry.db_path || null,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    $("#landing-status").textContent = "Failed: " + (err.detail || res.status);
+    return;
+  }
+  showOpenProgress("Opening project…");
+}
+
+// ---------- new-project wizard ----------
+const wizardState = { step: 1, sceneMode: "folder", defaultProjectsRoot: null };
+
+function openWizard() {
+  wizardState.step = 1;
+  wizardState.sceneMode = "folder";
+  $("#wiz-photo-dir").value = "";
+  $("#wiz-jpeg-subdir").value = "";
+  $("#wiz-project-name").value = "";
+  $("#wiz-project-dir").value = "";
+  $("#wiz-gap").value = 30;
+  $("#wiz-gap-row").style.display = "none";
+  $$("#wiz-scene-cards .option-card").forEach((c) =>
+    c.classList.toggle("active", c.dataset.value === "folder"),
+  );
+  showWizardStep(1);
+  $("#wizard").classList.remove("hidden");
+}
+
+function closeWizard() {
+  $("#wizard").classList.add("hidden");
+}
+
+function showWizardStep(n) {
+  wizardState.step = n;
+  $$(".wizard-step").forEach((s) =>
+    s.classList.toggle("hidden", parseInt(s.dataset.step, 10) !== n),
+  );
+  $("#wizard-step-indicator").textContent = `Step ${n} of 4`;
+  $("#wizard-back").disabled = n === 1;
+  const onLast = n === 4;
+  $("#wizard-next").classList.toggle("hidden", onLast);
+  $("#wizard-create").classList.toggle("hidden", !onLast);
+  if (onLast) renderWizardSummary();
+}
+
+function autoFillProjectFields() {
+  const photoDir = $("#wiz-photo-dir").value.trim();
+  if (!photoDir) return;
+  const name = basename(photoDir);
+  if (!$("#wiz-project-name").value.trim()) {
+    $("#wiz-project-name").value = name;
+  }
+  if (!$("#wiz-project-dir").value.trim()) {
+    const root = wizardState.defaultProjectsRoot
+      || `${navigatorHomeGuess()}/PictureClassifier-Projects`;
+    $("#wiz-project-dir").value = `${root}/${name}`;
+  }
+}
+
+function navigatorHomeGuess() {
+  // Reasonable default for the placeholder; the server resolves ~ on its end.
+  return "~";
+}
+
+function syncProjectDirFromName() {
+  const name = $("#wiz-project-name").value.trim();
+  const cur = $("#wiz-project-dir").value.trim();
+  if (!name) return;
+  if (!cur || cur.endsWith("/" + (name.slice(0, -1) || "")) || cur === "") {
+    const root = wizardState.defaultProjectsRoot
+      || `${navigatorHomeGuess()}/PictureClassifier-Projects`;
+    $("#wiz-project-dir").value = `${root}/${name}`;
+  }
+}
+
+function renderWizardSummary() {
+  const items = [
+    ["Photos", $("#wiz-photo-dir").value],
+    ["JPEG subfolder", $("#wiz-jpeg-subdir").value || "(none)"],
+    ["Project name", $("#wiz-project-name").value],
+    ["Project folder", $("#wiz-project-dir").value],
+    ["Scene grouping",
+      wizardState.sceneMode === "time_gap"
+        ? `By time gap (${$("#wiz-gap").value || 30} min)`
+        : "By folder"],
+  ];
+  $("#wiz-summary").innerHTML = items
+    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
+    .join("");
+}
+
+function validateWizardStep(n) {
+  if (n === 1) {
+    return $("#wiz-photo-dir").value.trim() !== "" || "Pick a photo folder.";
+  }
+  if (n === 2) {
+    if (!$("#wiz-project-name").value.trim()) return "Enter a project name.";
+    if (!$("#wiz-project-dir").value.trim()) return "Enter a project folder.";
+    return true;
+  }
+  return true;
+}
+
+async function createProject() {
+  const payload = {
+    project_dir: $("#wiz-project-dir").value.trim(),
+    photo_dir: $("#wiz-photo-dir").value.trim(),
+    jpeg_subdir: $("#wiz-jpeg-subdir").value.trim(),
+    scene_grouping_mode: wizardState.sceneMode,
+    scene_grouping_gap_minutes: parseInt($("#wiz-gap").value, 10) || 30,
+  };
+  $("#wizard-create").disabled = true;
+  $("#wizard-create").textContent = "Creating…";
+  const res = await fetch("/api/project/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  $("#wizard-create").disabled = false;
+  $("#wizard-create").textContent = "Create project";
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert("Could not create project: " + (err.detail || res.status));
+    return;
+  }
+  showOpenProgress("Creating project…");
+}
+
+async function pickAndOpenProject() {
+  const status = $("#landing-status");
+  status.textContent = "Choose a project folder…";
+  try {
+    const res = await fetch("/api/browse-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initial: null }),
+    });
+    if (!res.ok) {
+      status.textContent = "Browse failed (" + res.status + ").";
+      return;
+    }
+    const result = await res.json();
+    if (!result.path) { status.textContent = ""; return; }
+    await openProjectByDir(result.path);
+  } catch (err) {
+    status.textContent = "Browse network error: " + err.message;
+  }
 }
 
 function pollOpenStatus() {

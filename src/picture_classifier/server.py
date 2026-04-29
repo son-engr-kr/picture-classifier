@@ -72,12 +72,25 @@ class OpenPayload(BaseModel):
     db_path: str | None = None
 
 
+class OpenProjectPayload(BaseModel):
+    project_dir: str
+
+
+class CreateProjectPayload(BaseModel):
+    project_dir: str
+    photo_dir: str
+    jpeg_subdir: str = ""
+    scene_grouping_mode: Literal["folder", "time_gap"] = "folder"
+    scene_grouping_gap_minutes: int = 30
+
+
 class BrowsePayload(BaseModel):
     initial: str | None = None
 
 
 class ForgetPayload(BaseModel):
-    db_path: str
+    db_path: str | None = None
+    project_dir: str | None = None
 
 
 class SceneGroupingPayload(BaseModel):
@@ -92,6 +105,7 @@ class AppContext:
 
     def __init__(self) -> None:
         self.db_path: Path | None = None
+        self.project_dir: Path | None = None  # set when running in project layout
         self.data: dict[str, Any] = {}
         self.photo_root: Path | None = None
         self.jpeg_root: Path | None = None
@@ -129,6 +143,7 @@ class AppContext:
         """Drop the current project so the landing page is shown again.
         Caches on disk are kept (cheap to invalidate via mtime checks)."""
         self.db_path = None
+        self.project_dir = None
         self.data = {}
         self.photo_root = None
         self.jpeg_root = None
@@ -138,7 +153,7 @@ class AppContext:
         self.opening_state = self._fresh_opening_state()
 
     def load_db(self, db_path: Path) -> None:
-        """Adopt an existing JSON db file as the current project."""
+        """Legacy: adopt a `picks.json` that lives next to the photos."""
         db_path = db_path.resolve()
         data = db.load(db_path)
         photo_root = Path(data["photo_root"])
@@ -146,6 +161,7 @@ class AppContext:
         jpeg_root = photo_root / jpeg_subdir if jpeg_subdir else photo_root
 
         self.db_path = db_path
+        self.project_dir = None
         self.data = data
         self.photo_root = photo_root
         self.jpeg_root = jpeg_root
@@ -153,6 +169,29 @@ class AppContext:
         self.faces_root = db_path.with_suffix(db_path.suffix + ".faces")
         self.thumbs_root.mkdir(exist_ok=True)
         self.faces_root.mkdir(exist_ok=True)
+        self._rebuild_index()
+        self.opening_state["ready"] = True
+
+    def load_project(self, project_dir: Path) -> None:
+        """New: adopt a project directory containing picks.json + .cache/."""
+        project_dir = project_dir.resolve()
+        db_path = project_dir / "picks.json"
+        assert db_path.is_file(), f"not a project directory (no picks.json): {project_dir}"
+        data = db.load(db_path)
+        photo_root = Path(data["photo_root"])
+        jpeg_subdir = data.get("jpeg_subdir", "")
+        jpeg_root = photo_root / jpeg_subdir if jpeg_subdir else photo_root
+
+        self.db_path = db_path
+        self.project_dir = project_dir
+        self.data = data
+        self.photo_root = photo_root
+        self.jpeg_root = jpeg_root
+        cache_root = project_dir / ".cache"
+        self.thumbs_root = cache_root / "thumbs"
+        self.faces_root = cache_root / "faces"
+        self.thumbs_root.mkdir(parents=True, exist_ok=True)
+        self.faces_root.mkdir(parents=True, exist_ok=True)
         self._rebuild_index()
         self.opening_state["ready"] = True
 
@@ -381,14 +420,23 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
 
     @app.post("/api/recents/forget")
     def forget_recent(payload: ForgetPayload) -> dict[str, Any]:
-        userstate.forget(Path(payload.db_path))
+        key = payload.project_dir or payload.db_path
+        if key:
+            userstate.forget(Path(key))
         return {"recents": userstate.get_recents()}
 
-    def _open_worker(payload: OpenPayload, db_path: Path) -> None:
+    def _do_open(
+        *,
+        photo_dir: Path,
+        jpeg_subdir: str,
+        db_path: Path,
+        project_dir: Path | None,
+        allow_autodetect_subdir: bool,
+        initial_scene_grouping: dict[str, Any] | None = None,
+    ) -> None:
+        """Shared open worker. If `project_dir` is set we load via project layout
+        (caches under project_dir/.cache/), otherwise legacy load_db is used."""
         try:
-            photo_dir = Path(payload.photo_dir).expanduser().resolve()
-
-            # Load any existing db first so we can inherit its jpeg_subdir.
             existing_data: dict[str, Any] | None = None
             if db_path.exists():
                 try:
@@ -397,11 +445,10 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
                     existing_data = None
 
             # Effective jpeg_subdir resolution priority:
-            #   user input > existing db > autodetect common subfolder
-            jpeg_subdir = payload.jpeg_subdir or ""
+            #   caller value > existing db > autodetect (legacy only)
             if not jpeg_subdir and existing_data:
                 jpeg_subdir = existing_data.get("jpeg_subdir", "") or ""
-            if not jpeg_subdir:
+            if not jpeg_subdir and allow_autodetect_subdir:
                 jpeg_subdir = _autodetect_jpeg_subdir(photo_dir)
             jpeg_root = photo_dir / jpeg_subdir if jpeg_subdir else photo_dir
 
@@ -418,7 +465,7 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
                 hint = _summarize_other_files(jpeg_root)
                 raise RuntimeError(
                     f"no .jpg/.jpeg/.png images found under {jpeg_root} ({hint}); "
-                    f"pick a different folder or set the JPEG subfolder under Advanced"
+                    f"pick a different folder or set the JPEG subfolder"
                 )
 
             existing_files = (
@@ -459,10 +506,37 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
 
                 run_clustering(db_path, progress_cb=cluster_cb)
 
+                # Apply user-chosen initial scene grouping (wizard).
+                if initial_scene_grouping and initial_scene_grouping.get("mode") == "time_gap":
+                    fresh = db.load(db_path)
+                    scenes.regroup(
+                        fresh["photos"],
+                        jpeg_root,
+                        "time_gap",
+                        initial_scene_grouping.get("gap_minutes", 30),
+                    )
+                    by_scene: dict[str, list[dict[str, Any]]] = {}
+                    for p in fresh["photos"]:
+                        by_scene.setdefault(p["scene"], []).append(p)
+                    for items in by_scene.values():
+                        apply_scene_suggestions(items)
+                    fresh["scene_grouping"] = {
+                        "mode": "time_gap",
+                        "gap_minutes": initial_scene_grouping.get("gap_minutes", 30),
+                    }
+                    db.save(db_path, fresh)
+
             ctx.opening_state["phase"] = "loading"
             ctx.opening_state["message"] = "Loading project…"
-            ctx.load_db(db_path)
-            userstate.remember_open(db_path, photo_dir, jpeg_subdir)
+            if project_dir is not None:
+                ctx.load_project(project_dir)
+                userstate.remember_open(
+                    db_path, photo_dir, jpeg_subdir,
+                    kind="project", project_dir=project_dir,
+                )
+            else:
+                ctx.load_db(db_path)
+                userstate.remember_open(db_path, photo_dir, jpeg_subdir)
 
             ctx.opening_state["phase"] = "done"
             ctx.opening_state["message"] = None
@@ -472,8 +546,7 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
             ctx.opening_state["running"] = False
             ctx.opening_state["ended_at"] = datetime.now().isoformat()
 
-    @app.post("/api/open")
-    def open_project(payload: OpenPayload) -> dict[str, Any]:
+    def _claim_open_lock() -> None:
         with ctx.score_lock:
             if ctx.opening_state["running"] or ctx.scoring_state["running"] or ctx.cluster_state["running"]:
                 raise HTTPException(status_code=409, detail="another task is running")
@@ -482,9 +555,96 @@ def create_app(initial_db_path: Path | None = None) -> FastAPI:
                 running=True,
                 started_at=datetime.now().isoformat(),
             )
+
+    @app.post("/api/open")
+    def open_legacy(payload: OpenPayload) -> dict[str, Any]:
+        """Legacy: picks.json lives next to (or inside) the photo folder."""
+        _claim_open_lock()
+        photo_dir = Path(payload.photo_dir).expanduser().resolve()
         db_path = _resolve_db_path(payload)
-        threading.Thread(target=_open_worker, args=(payload, db_path), daemon=True).start()
+        threading.Thread(
+            target=_do_open,
+            kwargs=dict(
+                photo_dir=photo_dir,
+                jpeg_subdir=payload.jpeg_subdir or "",
+                db_path=db_path,
+                project_dir=None,
+                allow_autodetect_subdir=True,
+            ),
+            daemon=True,
+        ).start()
         return {"started": True, "db_path": str(db_path)}
+
+    @app.post("/api/project/open")
+    def open_project(payload: OpenProjectPayload) -> dict[str, Any]:
+        """Open an existing project directory (created via the wizard)."""
+        _claim_open_lock()
+        project_dir = Path(payload.project_dir).expanduser().resolve()
+        db_path = project_dir / "picks.json"
+        if not db_path.is_file():
+            ctx.opening_state["running"] = False
+            ctx.opening_state["error"] = (
+                f"not a project directory (no picks.json found): {project_dir}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"not a project directory (no picks.json found): {project_dir}",
+            )
+        # photo_dir/jpeg_subdir come from the picks.json itself.
+        try:
+            data = db.load(db_path)
+            photo_dir = Path(data["photo_root"]).expanduser().resolve()
+            jpeg_subdir = data.get("jpeg_subdir", "") or ""
+        except Exception as exc:
+            ctx.opening_state["running"] = False
+            ctx.opening_state["error"] = f"{type(exc).__name__}: {exc}"
+            raise HTTPException(status_code=400, detail=str(exc))
+        threading.Thread(
+            target=_do_open,
+            kwargs=dict(
+                photo_dir=photo_dir,
+                jpeg_subdir=jpeg_subdir,
+                db_path=db_path,
+                project_dir=project_dir,
+                allow_autodetect_subdir=False,
+            ),
+            daemon=True,
+        ).start()
+        return {"started": True, "project_dir": str(project_dir)}
+
+    @app.post("/api/project/create")
+    def create_project(payload: CreateProjectPayload) -> dict[str, Any]:
+        """Create a new project directory and trigger the initial score+cluster."""
+        _claim_open_lock()
+        project_dir = Path(payload.project_dir).expanduser().resolve()
+        photo_dir = Path(payload.photo_dir).expanduser().resolve()
+        if not photo_dir.is_dir():
+            ctx.opening_state["running"] = False
+            ctx.opening_state["error"] = f"photo folder does not exist: {photo_dir}"
+            raise HTTPException(status_code=400, detail=ctx.opening_state["error"])
+        try:
+            project_dir.mkdir(parents=True, exist_ok=True)
+            (project_dir / ".cache").mkdir(exist_ok=True)
+        except OSError as exc:
+            ctx.opening_state["running"] = False
+            ctx.opening_state["error"] = f"could not create project directory: {exc}"
+            raise HTTPException(status_code=400, detail=ctx.opening_state["error"])
+        threading.Thread(
+            target=_do_open,
+            kwargs=dict(
+                photo_dir=photo_dir,
+                jpeg_subdir=payload.jpeg_subdir or "",
+                db_path=project_dir / "picks.json",
+                project_dir=project_dir,
+                allow_autodetect_subdir=False,
+                initial_scene_grouping={
+                    "mode": payload.scene_grouping_mode,
+                    "gap_minutes": payload.scene_grouping_gap_minutes,
+                },
+            ),
+            daemon=True,
+        ).start()
+        return {"started": True, "project_dir": str(project_dir)}
 
     # ----- viewer data -----------------------------------------------
 
